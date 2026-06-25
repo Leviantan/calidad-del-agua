@@ -15,7 +15,6 @@ st.set_page_config(
 )
 
 APP_DIR = Path(__file__).resolve().parent
-
 PREDICT_SCRIPT = APP_DIR / "predict.py"
 
 DATAROBOT_API_KEY = st.secrets["DATAROBOT_API_KEY"]
@@ -23,12 +22,36 @@ DATAROBOT_DEPLOYMENT_ID = st.secrets["DATAROBOT_DEPLOYMENT_ID"]
 DATAROBOT_HOST = st.secrets.get("DATAROBOT_HOST", "https://app.datarobot.com")
 
 
+VARIABLES_MODELO = [
+    "Aluminio",
+    "Amonio",
+    "Arsénico",
+    "Bario",
+    "Cadmio",
+    "Cloraminas",
+    "Cromo",
+    "Cobre",
+    "Fluoruro",
+    "Bacteria",
+    "Virus",
+    "Plomo",
+    "Nitratos",
+    "Nitritos",
+    "Mercurio",
+    "Perclorato",
+    "Radio",
+    "Selenio",
+    "Plata",
+    "Uranio",
+]
+
+
 def ejecutar_prediccion_datarobot(df_entrada: pd.DataFrame) -> pd.DataFrame:
     with tempfile.TemporaryDirectory() as temp_dir:
         input_path = Path(temp_dir) / "entrada.csv"
         output_path = Path(temp_dir) / "salida.csv"
 
-        df_entrada.to_csv(input_path, index=False, encoding="utf-8")
+        df_entrada.to_csv(input_path, index=False, encoding="utf-8-sig")
 
         comando = [
             sys.executable,
@@ -63,8 +86,6 @@ def ejecutar_prediccion_datarobot(df_entrada: pd.DataFrame) -> pd.DataFrame:
 def mostrar_resultado(df_resultado: pd.DataFrame):
     st.subheader("Resultado")
 
-    st.dataframe(df_resultado, use_container_width=True)
-
     columnas_prediccion = [
         col for col in df_resultado.columns
         if "prediction" in col.lower()
@@ -73,17 +94,17 @@ def mostrar_resultado(df_resultado: pd.DataFrame):
 
     if columnas_prediccion:
         valor = df_resultado[columnas_prediccion[0]].iloc[0]
-        st.metric("Predicción del modelo", valor)
 
-    columnas_estado = [
-        col for col in df_resultado.columns
-        if "prediction_status" in col.lower()
-    ]
+        if str(valor) in ["1", "1.0", "True", "true"]:
+            st.success("El modelo predice que el agua es segura para consumo humano.")
+        elif str(valor) in ["0", "0.0", "False", "false"]:
+            st.error("El modelo predice que el agua NO es segura para consumo humano.")
+        else:
+            st.metric("Predicción del modelo", valor)
 
-    if columnas_estado:
-        st.caption(f"Estado: {df_resultado[columnas_estado[0]].iloc[0]}")
+    st.dataframe(df_resultado, use_container_width=True)
 
-    csv = df_resultado.to_csv(index=False).encode("utf-8")
+    csv = df_resultado.to_csv(index=False).encode("utf-8-sig")
 
     st.download_button(
         "Descargar resultado CSV",
@@ -110,58 +131,24 @@ with st.form("formulario_agua"):
 
     col1, col2 = st.columns(2)
 
-    with col1:
-        aluminio = st.number_input("Aluminio", value=0.04, format="%.6f")
-        amonio = st.number_input("Amonio", value=0.05, format="%.6f")
-        arsenico = st.number_input("Arsénico", value=0.01, format="%.6f")
-        bario = st.number_input("Bario", value=0.01, format="%.6f")
-        cadmio = st.number_input("Cadmio", value=0.02, format="%.6f")
-        cloraminas = st.number_input("Cloraminas", value=0.02, format="%.6f")
-        cromo = st.number_input("Cromo", value=0.02, format="%.6f")
-        cobre = st.number_input("Cobre", value=0.01, format="%.6f")
-        fluoruro = st.number_input("Fluoruro", value=0.02, format="%.6f")
-        bacteria = st.number_input("Bacteria", value=0.03, format="%.6f")
+    valores = {}
 
-    with col2:
-        virus = st.number_input("Virus", value=0.01, format="%.6f")
-        plomo = st.number_input("Plomo", value=0.03, format="%.6f")
-        nitratos = st.number_input("Nitratos", value=0.02, format="%.6f")
-        nitritos = st.number_input("Nitritos", value=0.02, format="%.6f")
-        mercurio = st.number_input("Mercurio", value=0.03, format="%.6f")
-        perclorato = st.number_input("Perclorato", value=0.01, format="%.6f")
-        radio = st.number_input("Radio", value=0.08, format="%.6f")
-        selenio = st.number_input("Selenio", value=0.03, format="%.6f")
-        plata = st.number_input("Plata", value=0.07, format="%.6f")
-        uranio = st.number_input("Uranio", value=0.21, format="%.6f")
+    for i, variable in enumerate(VARIABLES_MODELO):
+        columna = col1 if i < 10 else col2
+
+        with columna:
+            valores[variable] = st.number_input(
+                variable,
+                value=0.01,
+                min_value=0.0,
+                format="%.6f"
+            )
 
     enviar = st.form_submit_button("Evaluar calidad del agua")
 
 
 if enviar:
-    entrada = pd.DataFrame([
-        {
-            "aluminium": aluminio,
-            "ammonia": amonio,
-            "arsenic": arsenico,
-            "barium": bario,
-            "cadmium": cadmio,
-            "chloramine": cloraminas,
-            "chromium": cromo,
-            "copper": cobre,
-            "flouride": fluoruro,
-            "bacteria": bacteria,
-            "viruses": virus,
-            "lead": plomo,
-            "nitrates": nitratos,
-            "nitrites": nitritos,
-            "mercury": mercurio,
-            "perchlorate": perclorato,
-            "radium": radio,
-            "selenium": selenio,
-            "silver": plata,
-            "uranium": uranio,
-        }
-    ])
+    entrada = pd.DataFrame([valores], columns=VARIABLES_MODELO)
 
     st.write("Datos enviados al modelo:")
     st.dataframe(entrada, use_container_width=True)
